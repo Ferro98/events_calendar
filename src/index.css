@@ -1,44 +1,95 @@
 @import "tailwindcss";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
 
-/* Forza il background globale anche per il body */
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  @apply bg-gray-50 dark:bg-gray-950;
+  @apply bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased;
 }
 
-/* Overrides per il calendario (già ottimi) */
-.dark .rbc-calendar {
-  background-color: #030712 !important; /* gray-950 */
-  color: #f3f4f6 !important;
+/* Rispetta chi disattiva le animazioni a livello di sistema */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-.dark .rbc-header {
-  background-color: #111827 !important; /* gray-900 */
-  border-bottom: 1px solid #374151 !important;
-  color: #e5e7eb !important;
+/* Selezione testo coerente col brand invece del blu di default */
+::selection {
+  background-color: rgb(249 115 22 / 0.3);
+  /* orange-500 */
 }
 
-.dark .rbc-month-view, 
-.dark .rbc-time-view, 
-.dark .rbc-day-bg {
-  border-color: #374151 !important; /* gray-700 */
+/* Focus visibile e accessibile, ma solo quando si naviga da tastiera
+   (così non appare il riquadro arancione ad ogni click del mouse) */
+:focus-visible {
+  outline: 2px solid #f97316;
+  /* orange-500 */
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-.dark .rbc-off-range-bg {
-  background-color: #030712 !important; /* gray-950 */
+/* ------------------------------------------------------------------ */
+/* Scrollbar                                                           */
+/* ------------------------------------------------------------------ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+  /* gray-300 */
 }
 
-.dark .rbc-date-cell {
-  color: #9ca3af !important; /* gray-400 */
+.dark * {
+  scrollbar-color: #374151 transparent;
+  /* gray-700 */
 }
 
-.dark .rbc-today {
-  background-color: #111827 !important;
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-button, a, [role="button"] {
-  cursor: pointer !important;
+*::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 9999px;
 }
+
+.dark *::-webkit-scrollbar-thumb {
+  background-color: #374151;
+}
+
+/* ------------------------------------------------------------------ */
+/* Interazioni                                                         */
+/* ------------------------------------------------------------------ */
+
+button,
+a,
+[role="button"] {
+  cursor: pointer;
+  /* Rimuove l'evidenziazione grigia al tap su mobile/Safari iOS */
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Gli override specifici di react-big-calendar vivono ora vicino al
+   componente che li usa, scoperti sotto .calendar-shell in
+   CalendarView.jsx — niente più CSS globale "a sorpresa" che colpisce
+   ogni calendario futuro o litiga per specificità con !important. */
