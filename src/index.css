@@ -38,3 +38,7 @@ body {
 .dark .rbc-today {
   background-color: #111827 !important;
 }
+
+button, a, [role="button"] {
+  cursor: pointer !important;
+}
