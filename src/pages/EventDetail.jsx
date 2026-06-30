@@ -10,6 +10,25 @@ export default function EventDetail({ user }) {
 
   useEffect(() => {
     fetchEventData();
+
+    // Ascolta i cambiamenti in tempo reale su RSVP e Oggetti
+    const channel = supabase
+      .channel("schema-db-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "rsvps" },
+        () => fetchEventData(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "event_items" },
+        () => fetchEventData(),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
   const fetchEventData = async () => {
@@ -53,19 +72,35 @@ export default function EventDetail({ user }) {
     myRsvp?.status === "Parteciperò" || myRsvp?.status === "Forse";
 
   const updateRSVP = async (status) => {
-    const { error } = await supabase.from("rsvps").upsert(
-      {
-        event_id: id,
-        user_id: user.id,
-        status: status,
-      },
-      { onConflict: "event_id, user_id" },
-    );
+    // 1. SE CLICCA "NO": Liberiamo prima il posto auto in modo atomico sul DB
+    if (status === "Non parteciperò" && myRsvp?.driver_id) {
+      await supabase.rpc("book_seat_atomic", {
+        p_event_id: id,
+        p_user_id: user.id,
+        p_driver_id: myRsvp.driver_id, // Passando lo stesso driver, la funzione toglie il posto e lo restituisce
+      });
+    }
 
-    if (error) {
-      console.error("Errore updateRSVP:", error);
-      alert(error.message);
-    } else fetchEventData();
+    // 2. Prepariamo i dati per l'upsert dell'RSVP
+    const rsvpData = {
+      event_id: id,
+      user_id: user.id,
+      status: status,
+    };
+
+    // Se dice no, azzeriamo anche le sue info auto
+    if (status === "Non parteciperò") {
+      rsvpData.has_car = false;
+      rsvpData.available_seats = 0;
+      rsvpData.driver_id = null;
+    }
+
+    // 3. Eseguiamo l'aggiornamento dello stato dell'utente
+    const { error } = await supabase
+      .from("rsvps")
+      .upsert(rsvpData, { onConflict: "event_id, user_id" });
+
+    if (!error) fetchEventData();
   };
 
   if (!event) return <div className="dark:text-white p-4">Caricamento...</div>;
@@ -167,7 +202,7 @@ export default function EventDetail({ user }) {
         </div>
       </div>
 
-      {isParticipating && (
+      {isParticipating ? (
         <>
           {/* Carpooling Management */}
           {/* Gestisci Passaggio - UI Modificata con Bottoni Posti */}
@@ -226,24 +261,40 @@ export default function EventDetail({ user }) {
                 <div className="space-y-2">
                   {rsvps
                     .filter((r) => r.has_car)
-                    .map((driver) => (
-                      <div
-                        key={driver.user_id}
-                        className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded"
-                      >
-                        <span className="text-sm dark:text-white">
-                          {driver.user_profile?.display_name}
-                        </span>
-                        <button
-                          onClick={() => bookSeat(driver.user_id)}
-                          className={`text-xs px-2 py-1 rounded ${myRsvp?.driver_id === driver.user_id ? "bg-green-600 text-white" : "bg-blue-500 text-white"}`}
+                    .map((driver) => {
+                      const isPiena = driver.available_seats <= 0;
+                      const isMiaPrenotazione =
+                        myRsvp?.driver_id === driver.user_id;
+
+                      return (
+                        <div
+                          key={driver.user_id}
+                          className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded"
                         >
-                          {myRsvp?.driver_id === driver.user_id
-                            ? "Prenotato ✅"
-                            : "Prenota"}
-                        </button>
-                      </div>
-                    ))}
+                          <span className="text-sm dark:text-white">
+                            {driver.user_profile?.display_name} (
+                            {driver.available_seats} posti)
+                          </span>
+                          <button
+                            disabled={isPiena && !isMiaPrenotazione}
+                            onClick={() => bookSeat(driver.user_id)}
+                            className={`text-xs px-2 py-1 rounded transition-all cursor-pointer ${
+                              isMiaPrenotazione
+                                ? "bg-green-600 text-white"
+                                : isPiena
+                                  ? "bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed"
+                                  : "bg-blue-500 text-white hover:bg-blue-600"
+                            }`}
+                          >
+                            {isMiaPrenotazione
+                              ? "Prenotato ✅"
+                              : isPiena
+                                ? "Auto Piena ❌"
+                                : "Prenota"}
+                          </button>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -298,7 +349,6 @@ export default function EventDetail({ user }) {
             )}
           </div>
 
-          {/* Checklist */}
           {/* Checklist Cose da Portare */}
           <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800">
             <h2 className="text-lg font-bold mb-4 dark:text-white">
@@ -372,6 +422,11 @@ export default function EventDetail({ user }) {
             </div>
           </div>
         </>
+      ) : (
+        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-300 p-4 rounded-2xl text-center text-sm font-medium animate-fade-in">
+          Hai indicato che non parteciperai a questo evento. Cambia la tua
+          risposta per vedere la logistica e la checklist.
+        </div>
       )}
     </div>
   );
