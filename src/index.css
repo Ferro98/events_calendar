@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Forza il background globale anche per il body */
+body {
+  @apply bg-gray-50 dark:bg-gray-950;
+}
+
+/* Overrides per il calendario (già ottimi) */
+.dark .rbc-calendar {
+  background-color: #030712 !important; /* gray-950 */
+  color: #f3f4f6 !important;
+}
+
+.dark .rbc-header {
+  background-color: #111827 !important; /* gray-900 */
+  border-bottom: 1px solid #374151 !important;
+  color: #e5e7eb !important;
+}
+
+.dark .rbc-month-view, 
+.dark .rbc-time-view, 
+.dark .rbc-day-bg {
+  border-color: #374151 !important; /* gray-700 */
+}
+
+.dark .rbc-off-range-bg {
+  background-color: #030712 !important; /* gray-950 */
+}
+
+.dark .rbc-date-cell {
+  color: #9ca3af !important; /* gray-400 */
+}
+
+.dark .rbc-today {
+  background-color: #111827 !important;
+}
