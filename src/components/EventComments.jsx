@@ -124,18 +124,18 @@ export default function EventComments({ eventId, user }) {
       </div>
 
       {/* Input Form */}
-      <form onSubmit={handleSubmit} className="flex gap-2">
+      <form onSubmit={handleSubmit} className="flex items-center gap-2">
         <input
           type="text"
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
           placeholder="Scrivi un commento..."
-          className="flex-1 p-3 border rounded-xl text-xs bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 outline-none"
+          className="flex-1 min-w-0 p-3 border rounded-xl text-xs bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 outline-none"
         />
         <button
           type="submit"
           disabled={loading}
-          className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-4 rounded-xl text-xs transition shadow-sm cursor-pointer disabled:opacity-50"
+          className="shrink-0 whitespace-nowrap bg-orange-500 hover:bg-orange-600 text-white font-bold px-4 py-3 rounded-xl text-xs transition shadow-sm cursor-pointer disabled:opacity-50"
         >
           Invia
         </button>

@@ -621,11 +621,10 @@ export default function EventDetail({ user }) {
                 key={opt.status}
                 onClick={() => updateRSVP(opt.status)}
                 disabled={isRsvpBusy}
-                className={`flex-1 py-3 rounded-lg font-bold transition-all duration-200 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm md:text-base ${opt.color} ${
-                  isSelected
-                    ? "ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 ring-gray-900 dark:ring-white"
-                    : ""
-                }`}
+                className={`flex-1 py-3 rounded-lg font-bold transition-all duration-200 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm md:text-base ${opt.color} ${isSelected
+                  ? "ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 ring-gray-900 dark:ring-white"
+                  : ""
+                  }`}
               >
                 {opt.label}
               </button>
@@ -667,11 +666,10 @@ export default function EventDetail({ user }) {
                           key={posti}
                           type="button"
                           onClick={() => updateCarpool(true, posti)}
-                          className={`flex-1 py-2 rounded-lg font-bold text-sm border transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-indigo-600 text-white border-indigo-600"
-                              : "bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
-                          }`}
+                          className={`flex-1 py-2 rounded-lg font-bold text-sm border transition-all cursor-pointer ${isSelected
+                            ? "bg-indigo-600 text-white border-indigo-600"
+                            : "bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            }`}
                         >
                           {posti}
                         </button>
@@ -717,13 +715,12 @@ export default function EventDetail({ user }) {
                                   ? "Tocca per annullare la prenotazione"
                                   : undefined
                               }
-                              className={`text-xs px-2 py-1 rounded transition-all cursor-pointer ${
-                                isMiaPrenotazione
-                                  ? "bg-green-600 text-white hover:bg-green-700"
-                                  : isPiena
-                                    ? "bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed"
-                                    : "bg-blue-500 text-white hover:bg-blue-600"
-                              }`}
+                              className={`text-xs px-2 py-1 rounded transition-all cursor-pointer ${isMiaPrenotazione
+                                ? "bg-green-600 text-white hover:bg-green-700"
+                                : isPiena
+                                  ? "bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed"
+                                  : "bg-blue-500 text-white hover:bg-blue-600"
+                                }`}
                             >
                               {isMiaPrenotazione
                                 ? "Prenotato ✅"
@@ -754,16 +751,16 @@ export default function EventDetail({ user }) {
                   return (
                     <div
                       key={r.id}
-                      className="flex justify-between items-center py-2 border-b dark:border-gray-800 dark:text-gray-300 last:border-0"
+                      className="flex justify-between items-center gap-2 py-2 border-b dark:border-gray-800 dark:text-gray-300 last:border-0"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div
                           className={`h-8 w-8 rounded-full ${avatarColor(name)} text-white text-xs font-bold flex items-center justify-center shrink-0`}
                         >
                           {initials(name)}
                         </div>
                         <div className="flex flex-col">
-                          <span className="font-medium">{name}</span>
+                          <span className="font-medium truncate">{name}</span>
                           {r.has_car && (
                             <span className="text-xs text-indigo-500 font-semibold">
                               🚗{" "}
@@ -782,11 +779,10 @@ export default function EventDetail({ user }) {
                       </div>
 
                       <span
-                        className={`px-2 py-0.5 rounded text-xs shrink-0 ${
-                          r.status === "Parteciperò"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-600"
-                        }`}
+                        className={`px-2 py-0.5 rounded text-xs shrink-0 ${r.status === "Parteciperò"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-100 text-gray-600"
+                          }`}
                       >
                         {r.status}
                       </span>
@@ -803,12 +799,12 @@ export default function EventDetail({ user }) {
               📦 Cosa portiamo?
             </h2>
 
-            <div className="flex gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-4">
               <input
                 id="item-input"
                 type="text"
                 placeholder="Es. Birra, Ghiaccio..."
-                className="flex-1 p-2 rounded-lg border dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm"
+                className="flex-1 min-w-0 h-11 px-3 rounded-lg border dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm"
                 disabled={isAddingItem}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && e.target.value.trim() !== "") {
@@ -826,7 +822,7 @@ export default function EventDetail({ user }) {
                     input.value = "";
                   }
                 }}
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white font-bold rounded-lg text-sm transition-all active:scale-95 cursor-pointer"
+                className="h-11 px-4 shrink-0 whitespace-nowrap bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white font-bold rounded-lg text-sm transition-all active:scale-95 cursor-pointer"
               >
                 {isAddingItem ? "..." : "Aggiungi"}
               </button>
@@ -845,52 +841,50 @@ export default function EventDetail({ user }) {
                   return (
                     <div
                       key={item.id}
-                      className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg gap-2"
+                      // 🌟 MODIFICATO: Ora è flex-wrap fisso, gestisce lui la riga singola o doppia in base allo spazio
+                      className="flex flex-wrap items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl gap-x-4 gap-y-2 border border-gray-100 dark:border-gray-800/40"
                     >
+                      {/* Nome dell'oggetto */}
                       <span
-                        className={
-                          item.assigned_to
-                            ? "line-through text-gray-400"
-                            : "text-gray-800 dark:text-gray-200"
-                        }
+                        // 🌟 MODIFICATO: flex-1 e min-w dicono a Flexbox quando è il momento di cedere il passo e andare a capo
+                        className={`text-sm break-words flex-1 min-w-[140px] ${item.assigned_to
+                            ? "line-through text-gray-400 dark:text-gray-500"
+                            : "text-gray-800 dark:text-gray-200 font-medium"
+                          }`}
                       >
                         {item.item_name}
                       </span>
-                      <div className="flex items-center gap-2 shrink-0">
+
+                      {/* Barra delle azioni */}
+                      <div
+                        // 🌟 MODIFICATO: ml-auto fa la magia. Se va a capo, si tiene incollato a destra automaticamente
+                        className="flex items-center justify-end gap-2 shrink-0 ml-auto"
+                      >
                         {item.assigned_to && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-900/60 px-2 py-0.5 rounded-md truncate max-w-[120px]">
                             {item.profiles?.display_name || ""}
                           </span>
                         )}
+
                         <button
                           disabled={claimedByOther}
                           onClick={() =>
-                            claimedByMe
-                              ? releaseItem(item.id)
-                              : claimItem(item.id)
+                            claimedByMe ? releaseItem(item.id) : claimItem(item.id)
                           }
-                          title={
-                            claimedByOther
-                              ? "Già prenotato da qualcun altro"
-                              : undefined
-                          }
-                          className={`text-xs px-2 py-1 rounded font-medium transition ${
-                            claimedByMe
-                              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                          title={claimedByOther ? "Già prenotato da qualcun altro" : undefined}
+                          className={`text-xs px-2.5 py-1.5 rounded-lg font-semibold transition shrink-0 cursor-pointer ${claimedByMe
+                              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400"
                               : claimedByOther
                                 ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
-                                : "bg-blue-500 text-white hover:bg-blue-600"
-                          }`}
+                                : "bg-blue-500 text-white hover:bg-blue-600 shadow-sm"
+                            }`}
                         >
-                          {claimedByMe
-                            ? "✅ Annulla"
-                            : claimedByOther
-                              ? "✅ Preso"
-                              : "Prenota"}
+                          {claimedByMe ? "✅ Annulla" : claimedByOther ? "✅ Preso" : "Prenota"}
                         </button>
+
                         <button
                           onClick={() => removeItem(item.id)}
-                          className="text-red-400 hover:text-red-600 font-bold px-2"
+                          className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 font-bold px-2 h-8 flex items-center justify-center cursor-pointer transition"
                           aria-label="Rimuovi oggetto"
                         >
                           ✕
