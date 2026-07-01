@@ -547,18 +547,22 @@ export default function Home({ user }) {
             Tutto quello che la squad ha in programma
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Link
             to="/calendar"
-            className="hidden sm:inline-flex bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition shadow-sm"
+            className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-3 sm:px-4 rounded-xl transition shadow-sm"
+            title="Visualizza Calendario"
           >
-            📅 Calendario
+            <span>📅</span>
+            <span className="hidden sm:inline">Calendario</span>
           </Link>
+
           <button
             onClick={() => setIsModalOpen(true)}
-            className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold py-2.5 px-4 rounded-xl transition shadow-sm"
+            className="bg-orange-500 hover:bg-orange-600 text-white text-xs sm:text-sm font-bold py-2.5 px-3 sm:px-4 rounded-xl transition shadow-sm whitespace-nowrap"
           >
-            + Nuovo evento
+            + <span className="hidden sm:inline">Nuovo evento</span>
+            <span className="sm:hidden">Evento</span>
           </button>
         </div>
       </div>
