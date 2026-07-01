@@ -19,7 +19,16 @@ const localDayStart = (offsetDays = 0) => {
   return d;
 };
 
+// Combina un input <date> e un input <time> separati in un ISO string,
+// oppure restituisce null se la data non è stata compilata (il campo è
+// opzionale: solo il titolo è obbligatorio in fase di creazione).
+const combineDateTime = (dateStr, timeStr) => {
+  if (!dateStr) return null;
+  return new Date(`${dateStr}T${timeStr || "00:00"}`).toISOString();
+};
+
 const getEventStatus = (event) => {
+  if (!event.start_time || !event.end_time) return "unscheduled";
   const now = Date.now();
   const start = new Date(event.start_time).getTime();
   const end = new Date(event.end_time).getTime();
@@ -99,33 +108,57 @@ function ParticipantAvatars({ partecipanti }) {
         )}
       </div>
       <span className="text-xs text-gray-400 dark:text-gray-500">
-        {partecipanti.length} {partecipanti.length === 1 ? "partecipante" : "partecipanti"}
+        {partecipanti.length}{" "}
+        {partecipanti.length === 1 ? "partecipante" : "partecipanti"}
       </span>
     </div>
   );
 }
 
 function EventCard({ event }) {
-  const partecipanti = event.rsvps?.filter((r) => r.status === "Parteciperò") || [];
+  const partecipanti =
+    event.rsvps?.filter((r) => r.status === "Parteciperò") || [];
   const status = getEventStatus(event);
+  const hasDate = !!event.start_time;
 
   return (
     <Link
       to={`/event/${event.id}`}
-      className={`flex bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:border-orange-500 hover:shadow-md transition group overflow-hidden ${status === "ended" ? "opacity-60 hover:opacity-100" : ""
-        }`}
+      className={`flex bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:border-orange-500 hover:shadow-md transition group overflow-hidden ${
+        status === "ended" ? "opacity-60 hover:opacity-100" : ""
+      }`}
     >
-      {/* Ticket stub: data dell'evento */}
+      {/* Ticket stub: data dell'evento, o placeholder se ancora da definire */}
       <div className="relative flex flex-col items-center justify-center w-20 shrink-0 bg-orange-50 dark:bg-orange-950/40 px-2 py-4">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-orange-500 dark:text-orange-400">
-          {new Date(event.start_time).toLocaleDateString("it-IT", { month: "short" })}
-        </span>
-        <span className="text-2xl font-black text-orange-700 dark:text-orange-300 leading-none mt-0.5">
-          {new Date(event.start_time).toLocaleDateString("it-IT", { day: "numeric" })}
-        </span>
-        <span className="text-[11px] font-medium text-orange-600 dark:text-orange-400 mt-1">
-          {new Date(event.start_time).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-        </span>
+        {hasDate ? (
+          <>
+            <span className="text-[10px] font-bold uppercase tracking-wide text-orange-500 dark:text-orange-400">
+              {new Date(event.start_time).toLocaleDateString("it-IT", {
+                month: "short",
+              })}
+            </span>
+            <span className="text-2xl font-black text-orange-700 dark:text-orange-300 leading-none mt-0.5">
+              {new Date(event.start_time).toLocaleDateString("it-IT", {
+                day: "numeric",
+              })}
+            </span>
+            <span className="text-[11px] font-medium text-orange-600 dark:text-orange-400 mt-1">
+              {new Date(event.start_time).toLocaleTimeString("it-IT", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-xl">🗓️</span>
+            <span className="text-[10px] font-bold text-orange-500 dark:text-orange-400 text-center mt-1 leading-tight">
+              Da
+              <br />
+              definire
+            </span>
+          </>
+        )}
         {/* perforazione del biglietto */}
         <div
           className="absolute right-0 top-0 bottom-0 w-px"
@@ -145,7 +178,9 @@ function EventCard({ event }) {
         </div>
 
         {event.description && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 line-clamp-1 mt-0.5">{event.description}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 line-clamp-1 mt-0.5">
+            {event.description}
+          </p>
         )}
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 flex items-center gap-1">
@@ -163,11 +198,15 @@ function EventSection({ title, dotClass, events, emptyText, action }) {
     <div className="bg-gray-50/50 dark:bg-gray-900/30 p-4 rounded-3xl border border-gray-100 dark:border-gray-800/60 space-y-4">
       <div className="flex justify-between items-center px-2">
         <div className="flex items-center gap-2">
-          {dotClass && <span className={`flex h-2 w-2 rounded-full ${dotClass}`} />}
+          {dotClass && (
+            <span className={`flex h-2 w-2 rounded-full ${dotClass}`} />
+          )}
           <h2 className="text-xs font-black text-gray-900 dark:text-gray-50 uppercase tracking-wider">
             {title}
             {events.length > 0 && (
-              <span className="ml-1.5 text-gray-400 dark:text-gray-600 font-bold">({events.length})</span>
+              <span className="ml-1.5 text-gray-400 dark:text-gray-600 font-bold">
+                ({events.length})
+              </span>
             )}
           </h2>
         </div>
@@ -202,124 +241,132 @@ function CardSkeleton() {
   );
 }
 
-// --- Componente principale --------------------------------------------
+// --- Modal di creazione evento ------------------------------------------
 
-export default function Home({ user }) {
-  const [events, setEvents] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+function CreateEventModal({ onClose, onCreated, userId }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [location, setLocation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [location, setLocation] = useState("");
-
+  // Chiude il modal con ESC, comodo da tastiera
   useEffect(() => {
-    fetchUpcomingEvents();
-  }, []);
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
-  const fetchUpcomingEvents = async () => {
-    setIsLoading(true);
-
-    // Mezzanotte locale convertita correttamente in UTC: vedi il
-    // commento su localDayStart() per il perché del .toISOString().
-    const startOfToday = localDayStart(0);
-
-    const { data, error } = await supabase
-      .from("events")
-      .select(`
-        *,
-        profiles(display_name),
-        rsvps(status, profiles!rsvps_user_id_fkey(display_name))
-      `)
-      .gte("start_time", startOfToday.toISOString())
-      .order("start_time", { ascending: true });
-
-    if (!error && data) setEvents(data);
-    setIsLoading(false);
-  };
-
-  const handleCreateEvent = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError("");
 
-    if (!title || !startTime || !endTime) return;
-    if (new Date(endTime) <= new Date(startTime)) {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      setFormError("Il titolo è obbligatorio.");
+      return;
+    }
+
+    const start = combineDateTime(startDate, startTime);
+    const end = combineDateTime(endDate, endTime);
+
+    if (start && end && new Date(end) <= new Date(start)) {
       setFormError("L'orario di fine deve essere dopo l'orario di inizio.");
+      return;
+    }
+    // Se è stata data solo una delle due date, meglio segnalarlo subito
+    // piuttosto che salvare un evento con inizio ma senza fine (o viceversa).
+    if ((start && !end) || (!start && end)) {
+      setFormError(
+        "Inserisci sia l'inizio che la fine, oppure lascia entrambi vuoti.",
+      );
       return;
     }
 
     setIsSubmitting(true);
     const { error } = await supabase.from("events").insert({
-      title,
-      description,
-      start_time: new Date(startTime).toISOString(),
-      end_time: new Date(endTime).toISOString(),
-      location,
-      creator_id: user.id,
+      title: trimmedTitle,
+      description: description.trim() || null,
+      start_time: start,
+      end_time: end,
+      location: location.trim() || null,
+      creator_id: userId,
     });
     setIsSubmitting(false);
 
     if (!error) {
-      setTitle("");
-      setDescription("");
-      setStartTime("");
-      setEndTime("");
-      setLocation("");
-      fetchUpcomingEvents();
+      onCreated();
     } else {
       setFormError("Errore: " + error.message);
     }
   };
 
-  // Raggruppamento eventi in 3 fasce temporali, calcolate una sola volta
-  // e condivise da tutte le sezioni per evitare disallineamenti tra
-  // "oggi" al momento della query e "oggi" al momento del render.
-  const { todayEvents, thisWeekEvents, laterEvents } = useMemo(() => {
-    const tomorrow = localDayStart(1).getTime();
-    const nextWeek = localDayStart(7).getTime();
-
-    const today = [];
-    const week = [];
-    const later = [];
-
-    for (const event of events) {
-      const t = new Date(event.start_time).getTime();
-      if (t < tomorrow) today.push(event);
-      else if (t < nextWeek) week.push(event);
-      else later.push(event);
-    }
-    return { todayEvents: today, thisWeekEvents: week, laterEvents: later };
-  }, [events]);
-
   const inputClass =
     "w-full p-2 border rounded-lg text-sm bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 outline-none transition";
 
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 h-fit lg:sticky lg:top-6">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-orange-500 mb-1">Nuovo</p>
-        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-50 mb-4">Crea evento</h2>
+  // Alla selezione di data/ora, togliamo subito il focus dal campo:
+  // su Chrome/Edge/Safari questo chiude il picker nativo senza dover
+  // cliccare fuori. Su Firefox desktop il comportamento può variare
+  // leggermente: è un limite del browser, non risolvibile lato JS al 100%.
+  const closeOnPick = (setter) => (e) => {
+    setter(e.target.value);
+    e.target.blur();
+  };
 
-        <form onSubmit={handleCreateEvent} className="space-y-4">
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 w-full sm:max-w-md max-h-[90vh] overflow-y-auto"
+      >
+        <div className="sticky top-0 bg-white dark:bg-gray-900 flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-50 dark:border-gray-800">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-orange-500 mb-1">
+              Nuovo
+            </p>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-50">
+              Crea evento
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Chiudi"
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
-              Titolo
+              Titolo <span className="text-orange-500">*</span>
             </label>
             <input
               type="text"
-              required
+              autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Es. Grigliata"
               className={inputClass}
             />
           </div>
+
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
-              Descrizione
+              Descrizione{" "}
+              <span className="text-gray-300 dark:text-gray-600 normal-case">
+                (opzionale)
+              </span>
             </label>
             <textarea
               value={description}
@@ -328,35 +375,59 @@ export default function Home({ user }) {
               rows="2"
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
-                Inizio
-              </label>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+              Inizio{" "}
+              <span className="text-gray-300 dark:text-gray-600 normal-case">
+                (opzionale)
+              </span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
               <input
-                type="datetime-local"
-                required
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                type="date"
+                value={startDate}
+                onChange={closeOnPick(setStartDate)}
                 className={inputClass}
               />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
-                Fine
-              </label>
               <input
-                type="datetime-local"
-                required
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                type="time"
+                value={startTime}
+                onChange={closeOnPick(setStartTime)}
                 className={inputClass}
               />
             </div>
           </div>
+
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
-              Posto
+              Fine{" "}
+              <span className="text-gray-300 dark:text-gray-600 normal-case">
+                (opzionale)
+              </span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="date"
+                value={endDate}
+                onChange={closeOnPick(setEndDate)}
+                className={inputClass}
+              />
+              <input
+                type="time"
+                value={endTime}
+                onChange={closeOnPick(setEndTime)}
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+              Posto{" "}
+              <span className="text-gray-300 dark:text-gray-600 normal-case">
+                (opzionale)
+              </span>
             </label>
             <input
               type="text"
@@ -372,58 +443,185 @@ export default function Home({ user }) {
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 disabled:cursor-not-allowed text-white font-bold py-2 rounded-lg text-sm transition"
-          >
-            {isSubmitting ? "Pubblicazione..." : "Pubblica evento 🎉"}
-          </button>
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-bold py-2 rounded-lg text-sm transition hover:bg-gray-200 dark:hover:bg-gray-700"
+            >
+              Annulla
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 disabled:cursor-not-allowed text-white font-bold py-2 rounded-lg text-sm transition"
+            >
+              {isSubmitting ? "Pubblicazione..." : "Pubblica 🎉"}
+            </button>
+          </div>
         </form>
       </div>
+    </div>
+  );
+}
 
-      <div className="lg:col-span-2 space-y-8">
-        {isLoading ? (
-          <div className="space-y-3">
-            <CardSkeleton />
-            <CardSkeleton />
-            <CardSkeleton />
-          </div>
-        ) : (
-          <>
-            <EventSection
-              title="🔥 Oggi"
-              dotClass="bg-orange-500 animate-pulse"
-              events={todayEvents}
-              emptyText="Nessun evento oggi."
-              action={
-                <Link
-                  to="/calendar"
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 px-3 rounded-xl transition shadow-sm"
-                >
-                  📅 Calendario completo
-                </Link>
-              }
-            />
+// --- Componente principale --------------------------------------------
 
-            <EventSection
-              title="Questa settimana"
-              events={thisWeekEvents}
-              emptyText="Nessun altro evento nei prossimi 7 giorni."
-            />
+export default function Home({ user }) {
+  const [events, setEvents] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-            {laterEvents.length > 0 && (
-              <EventSection title="🚀 Più avanti nel tempo" events={laterEvents} emptyText="" />
-            )}
+  useEffect(() => {
+    fetchEvents();
+  }, []);
 
-            {events.length === 0 && (
-              <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl text-center border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400">
-                Nessun evento in programma. Creane uno dal pannello a sinistra.
-              </div>
-            )}
-          </>
-        )}
+  const fetchEvents = async () => {
+    setIsLoading(true);
+
+    // Prendiamo tutti gli eventi (anche senza data, ora che il titolo è
+    // l'unico campo obbligatorio) e li raggruppiamo lato client: filtrare
+    // via query solo quelli "futuri" escluderebbe per sempre gli eventi
+    // ancora senza data, dato che un confronto >= con un campo null in
+    // SQL non è mai vero.
+    const { data, error } = await supabase
+      .from("events")
+      .select(
+        `
+        *,
+        profiles(display_name),
+        rsvps(status, profiles!rsvps_user_id_fkey(display_name))
+      `,
+      )
+      .order("start_time", { ascending: true, nullsFirst: false });
+
+    if (!error && data) setEvents(data);
+    setIsLoading(false);
+  };
+
+  const handleCreated = () => {
+    setIsModalOpen(false);
+    fetchEvents();
+  };
+
+  // Raggruppamento eventi in 4 fasce, calcolate una sola volta e condivise
+  // da tutte le sezioni per evitare disallineamenti tra "oggi" al momento
+  // della query e "oggi" al momento del render.
+  const { unscheduledEvents, todayEvents, thisWeekEvents, laterEvents } =
+    useMemo(() => {
+      const tomorrow = localDayStart(1).getTime();
+      const nextWeek = localDayStart(7).getTime();
+
+      const unscheduled = [];
+      const today = [];
+      const week = [];
+      const later = [];
+
+      for (const event of events) {
+        if (!event.start_time) {
+          unscheduled.push(event);
+          continue;
+        }
+        const t = new Date(event.start_time).getTime();
+        if (t < localDayStart(0).getTime()) continue; // evento passato, non lo mostriamo in Home
+        if (t < tomorrow) today.push(event);
+        else if (t < nextWeek) week.push(event);
+        else later.push(event);
+      }
+      return {
+        unscheduledEvents: unscheduled,
+        todayEvents: today,
+        thisWeekEvents: week,
+        laterEvents: later,
+      };
+    }, [events]);
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-gray-900 dark:text-gray-50">
+            I tuoi eventi
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Tutto quello che la squad ha in programma
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/calendar"
+            className="hidden sm:inline-flex bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition shadow-sm"
+          >
+            📅 Calendario
+          </Link>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold py-2.5 px-4 rounded-xl transition shadow-sm"
+          >
+            + Nuovo evento
+          </button>
+        </div>
       </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+      ) : (
+        <>
+          <EventSection
+            title="🔥 Oggi"
+            dotClass="bg-orange-500 animate-pulse"
+            events={todayEvents}
+            emptyText="Nessun evento oggi."
+          />
+
+          <EventSection
+            title="Questa settimana"
+            events={thisWeekEvents}
+            emptyText="Nessun altro evento nei prossimi 7 giorni."
+          />
+
+          {laterEvents.length > 0 && (
+            <EventSection
+              title="🚀 Più avanti nel tempo"
+              events={laterEvents}
+              emptyText=""
+            />
+          )}
+
+          {unscheduledEvents.length > 0 && (
+            <EventSection
+              title="🗓️ Da pianificare"
+              events={unscheduledEvents}
+              emptyText="Nessun evento senza data."
+            />
+          )}
+
+          {events.length === 0 && (
+            <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl text-center border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+              Nessun evento in programma.{" "}
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="text-orange-500 font-bold hover:underline"
+              >
+                Creane uno
+              </button>
+              .
+            </div>
+          )}
+        </>
+      )}
+
+      {isModalOpen && (
+        <CreateEventModal
+          onClose={() => setIsModalOpen(false)}
+          onCreated={handleCreated}
+          userId={user.id}
+        />
+      )}
     </div>
   );
 }

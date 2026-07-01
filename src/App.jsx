@@ -82,6 +82,33 @@ export default function App() {
     display_name: profile.display_name,
   };
 
+  // Funzione per salvare il nuovo nome nel database
+  const handleUpdateName = async () => {
+    const nuovoNome = prompt(
+      "Inserisci il tuo nome e cognome reali:",
+      currentUser.display_name,
+    );
+
+    if (
+      !nuovoNome ||
+      !nuovoNome.trim() ||
+      nuovoNome === currentUser.display_name
+    )
+      return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ display_name: nuovoNome.trim() })
+      .eq("id", currentUser.id);
+
+    if (!error) {
+      // Aggiorna lo stato locale per vedere subito il cambio nella UI
+      setProfile({ ...profile, display_name: nuovoNome.trim() });
+    } else {
+      alert("Errore durante l'aggiornamento del nome.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-200">
       <header className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 mb-8 sticky top-0 z-50 shadow-sm">
@@ -93,9 +120,17 @@ export default function App() {
             ☀️ Summer Squad
           </a>
           <div className="flex items-center gap-4">
-            <div className="bg-orange-50 dark:bg-orange-950 border border-orange-100 dark:border-orange-900 text-orange-800 dark:text-orange-300 px-4 py-1.5 rounded-full font-semibold text-sm">
+            <button
+              onClick={handleUpdateName}
+              title="Clicca per modificare il tuo nome"
+              className="bg-orange-50 dark:bg-orange-950 border border-orange-100 dark:border-orange-900 text-orange-800 dark:text-orange-300 px-4 py-1.5 rounded-full font-semibold text-sm flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer group"
+            >
               Ciao, {currentUser.display_name}! 👋
-            </div>
+              <span className="text-[10px] opacity-0 group-hover:opacity-100 transition-opacity text-orange-400">
+                ✏️
+              </span>
+            </button>
+
             <button
               onClick={handleLogout}
               className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer px-2 py-1"

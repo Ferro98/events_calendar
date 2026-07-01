@@ -1,14 +1,76 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import EventComments from "../components/EventComments";
 
 const RSVP_OPTIONS = [
-  { status: "Parteciperò", label: "Sì", color: "bg-green-500 hover:bg-green-600" },
-  { status: "Forse", label: "Forse", color: "bg-yellow-500 hover:bg-yellow-600" },
-  { status: "Non parteciperò", label: "No", color: "bg-red-500 hover:bg-red-600" },
+  {
+    status: "Parteciperò",
+    label: "Sì",
+    color: "bg-green-500 hover:bg-green-600",
+  },
+  {
+    status: "Forse",
+    label: "Forse",
+    color: "bg-yellow-500 hover:bg-yellow-600",
+  },
+  {
+    status: "Non parteciperò",
+    label: "No",
+    color: "bg-red-500 hover:bg-red-600",
+  },
 ];
 
-const AVATAR_PALETTE = ["bg-orange-500", "bg-indigo-500", "bg-emerald-500", "bg-rose-500", "bg-sky-500", "bg-amber-500"];
+const AVATAR_PALETTE = [
+  "bg-orange-500",
+  "bg-indigo-500",
+  "bg-emerald-500",
+  "bg-rose-500",
+  "bg-sky-500",
+  "bg-amber-500",
+];
+
+const pad = (n) => String(n).padStart(2, "0");
+
+// Scompone un ISO string in <input type="date"> + <input type="time">
+// separati, nel fuso orario locale (non UTC, altrimenti l'orario mostrato
+// nel form di modifica non corrisponderebbe a quello scelto in origine).
+const isoToParts = (iso) => {
+  if (!iso) return { date: "", time: "" };
+  const d = new Date(iso);
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
+};
+
+// Ricompone data + ora locali in un ISO string, oppure null se la data
+// non è stata compilata (i campi restano opzionali anche in modifica).
+const partsToIso = (dateStr, timeStr) => {
+  if (!dateStr) return null;
+  return new Date(`${dateStr}T${timeStr || "00:00"}`).toISOString();
+};
+
+const formatEventDate = (event) => {
+  if (!event.start_time) return "Data da definire";
+  const start = new Date(event.start_time);
+  const startStr = start.toLocaleDateString("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  const startTime = start.toLocaleTimeString("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  if (!event.end_time) return `${startStr}, dalle ${startTime}`;
+  const end = new Date(event.end_time);
+  const endTime = end.toLocaleTimeString("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${startStr}, ${startTime} – ${endTime}`;
+};
 
 const initials = (name) =>
   (name || "U")
@@ -26,7 +88,9 @@ const avatarColor = (name) => {
 
 function Card({ children, className = "" }) {
   return (
-    <div className={`bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 ${className}`}>
+    <div
+      className={`bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 ${className}`}
+    >
       {children}
     </div>
   );
@@ -36,7 +100,11 @@ function DetailSkeleton() {
   return (
     <div className="max-w-3xl mx-auto space-y-6 p-4 animate-pulse">
       {[120, 90, 140, 90].map((h, i) => (
-        <div key={i} className="bg-gray-100 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800" style={{ height: h }} />
+        <div
+          key={i}
+          className="bg-gray-100 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800"
+          style={{ height: h }}
+        />
       ))}
     </div>
   );
@@ -44,6 +112,7 @@ function DetailSkeleton() {
 
 export default function EventDetail({ user }) {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [event, setEvent] = useState(null);
   const [rsvps, setRsvps] = useState([]);
   const [items, setItems] = useState([]);
@@ -51,6 +120,15 @@ export default function EventDetail({ user }) {
   const [errorMsg, setErrorMsg] = useState("");
   const [isRsvpBusy, setIsRsvpBusy] = useState(false);
   const [isAddingItem, setIsAddingItem] = useState(false);
+
+  // Modifica evento (chiunque può completare i dettagli mancanti)
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSavingEvent, setIsSavingEvent] = useState(false);
+  const [editForm, setEditForm] = useState(null);
+
+  // Eliminazione evento (solo il creatore)
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchEventData(true);
@@ -62,12 +140,22 @@ export default function EventDetail({ user }) {
       .channel(`event-${id}-changes`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "rsvps", filter: `event_id=eq.${id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "rsvps",
+          filter: `event_id=eq.${id}`,
+        },
         () => fetchEventData(),
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "event_items", filter: `event_id=eq.${id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "event_items",
+          filter: `event_id=eq.${id}`,
+        },
         () => fetchEventData(),
       )
       .subscribe();
@@ -112,7 +200,8 @@ export default function EventDetail({ user }) {
   };
 
   const myRsvp = rsvps.find((r) => r.user_id === user.id);
-  const isParticipating = myRsvp?.status === "Parteciperò" || myRsvp?.status === "Forse";
+  const isParticipating =
+    myRsvp?.status === "Parteciperò" || myRsvp?.status === "Forse";
 
   const updateRSVP = async (status) => {
     setIsRsvpBusy(true);
@@ -135,7 +224,9 @@ export default function EventDetail({ user }) {
       rsvpData.driver_id = null;
     }
 
-    const { error } = await supabase.from("rsvps").upsert(rsvpData, { onConflict: "event_id, user_id" });
+    const { error } = await supabase
+      .from("rsvps")
+      .upsert(rsvpData, { onConflict: "event_id, user_id" });
     if (error) setErrorMsg("Errore nel salvare la risposta: " + error.message);
     else await fetchEventData();
     setIsRsvpBusy(false);
@@ -200,7 +291,8 @@ export default function EventDetail({ user }) {
       .select();
 
     if (error) setErrorMsg("Errore: " + error.message);
-    else if (!data || data.length === 0) setErrorMsg("Troppo tardi: qualcun altro l'ha già preso un istante fa.");
+    else if (!data || data.length === 0)
+      setErrorMsg("Troppo tardi: qualcun altro l'ha già preso un istante fa.");
     await fetchEventData();
   };
 
@@ -222,16 +314,104 @@ export default function EventDetail({ user }) {
     const name = itemName.trim();
     if (!name) return;
     setIsAddingItem(true);
-    const { error } = await supabase.from("event_items").insert({ event_id: id, item_name: name });
-    if (error) setErrorMsg("Errore nell'aggiungere l'oggetto: " + error.message);
+    const { error } = await supabase
+      .from("event_items")
+      .insert({ event_id: id, item_name: name });
+    if (error)
+      setErrorMsg("Errore nell'aggiungere l'oggetto: " + error.message);
     else await fetchEventData();
     setIsAddingItem(false);
   };
 
   const removeItem = async (itemId) => {
-    const { error } = await supabase.from("event_items").delete().eq("id", itemId);
+    const { error } = await supabase
+      .from("event_items")
+      .delete()
+      .eq("id", itemId);
     if (!error) await fetchEventData();
   };
+
+  const openEdit = () => {
+    const start = isoToParts(event.start_time);
+    const end = isoToParts(event.end_time);
+    setEditForm({
+      title: event.title || "",
+      description: event.description || "",
+      location: event.location || "",
+      startDate: start.date,
+      startTime: start.time,
+      endDate: end.date,
+      endTime: end.time,
+    });
+    setIsEditing(true);
+  };
+
+  const saveEvent = async (e) => {
+    e.preventDefault();
+    setErrorMsg("");
+
+    const trimmedTitle = editForm.title.trim();
+    if (!trimmedTitle) {
+      setErrorMsg("Il titolo è obbligatorio.");
+      return;
+    }
+
+    const start = partsToIso(editForm.startDate, editForm.startTime);
+    const end = partsToIso(editForm.endDate, editForm.endTime);
+
+    if (start && end && new Date(end) <= new Date(start)) {
+      setErrorMsg("L'orario di fine deve essere dopo l'orario di inizio.");
+      return;
+    }
+    if ((start && !end) || (!start && end)) {
+      setErrorMsg(
+        "Inserisci sia l'inizio che la fine, oppure lascia entrambi vuoti.",
+      );
+      return;
+    }
+
+    setIsSavingEvent(true);
+    const { error } = await supabase
+      .from("events")
+      .update({
+        title: trimmedTitle,
+        description: editForm.description.trim() || null,
+        location: editForm.location.trim() || null,
+        start_time: start,
+        end_time: end,
+      })
+      .eq("id", id);
+    setIsSavingEvent(false);
+
+    if (error) {
+      setErrorMsg("Errore nel salvare le modifiche: " + error.message);
+    } else {
+      setIsEditing(false);
+      await fetchEventData();
+    }
+  };
+
+  const deleteEvent = async () => {
+    setIsDeleting(true);
+    const { error } = await supabase.from("events").delete().eq("id", id);
+    setIsDeleting(false);
+
+    if (error) {
+      setErrorMsg("Errore nell'eliminare l'evento: " + error.message);
+      setIsConfirmingDelete(false);
+    } else {
+      navigate("/");
+    }
+  };
+
+  const closeOnPick = (field) => (e) => {
+    setEditForm((f) => ({ ...f, [field]: e.target.value }));
+    e.target.blur();
+  };
+
+  const isCreator = event?.creator_id === user.id;
+  const editInputClass =
+    "w-full p-2 border rounded-lg text-sm bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 outline-none transition";
 
   if (isLoading) return <DetailSkeleton />;
   if (!event) {
@@ -251,21 +431,188 @@ export default function EventDetail({ user }) {
       {errorMsg && (
         <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-sm font-medium px-4 py-3 rounded-2xl flex items-center justify-between gap-3">
           {errorMsg}
-          <button onClick={() => setErrorMsg("")} className="shrink-0 font-bold hover:opacity-70">
+          <button
+            onClick={() => setErrorMsg("")}
+            className="shrink-0 font-bold hover:opacity-70"
+          >
             ✕
           </button>
         </div>
       )}
 
       <Card>
-        <h1 className="text-3xl font-black text-gray-900 dark:text-white">{event.title}</h1>
-        {event.description && <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">{event.description}</p>}
-        <p className="text-gray-500 dark:text-gray-400 mt-2">📍 {event.location || "Nessuna posizione"}</p>
+        {!isEditing ? (
+          <>
+            <div className="flex items-start justify-between gap-3">
+              <h1 className="text-3xl font-black text-gray-900 dark:text-white">
+                {event.title}
+              </h1>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={openEdit}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                  aria-label="Modifica evento"
+                  title="Modifica evento"
+                >
+                  ✏️
+                </button>
+                {isCreator && (
+                  <button
+                    onClick={() => setIsConfirmingDelete(true)}
+                    className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/40 transition"
+                    aria-label="Elimina evento"
+                    title="Elimina evento"
+                  >
+                    🗑️
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {event.description && (
+              <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">
+                {event.description}
+              </p>
+            )}
+            <p className="text-gray-500 dark:text-gray-400 mt-2">
+              🕒 {formatEventDate(event)}
+            </p>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">
+              📍 {event.location || "Nessuna posizione"}
+            </p>
+
+            {isConfirmingDelete && (
+              <div className="mt-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
+                <p className="text-sm font-medium text-rose-700 dark:text-rose-300">
+                  Eliminare definitivamente questo evento? Non si può annullare.
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => setIsConfirmingDelete(false)}
+                    className="flex-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-bold py-2 rounded-lg text-sm transition hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    onClick={deleteEvent}
+                    disabled={isDeleting}
+                    className="flex-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white font-bold py-2 rounded-lg text-sm transition"
+                  >
+                    {isDeleting ? "Eliminazione..." : "Elimina definitivamente"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <form onSubmit={saveEvent} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                Titolo <span className="text-orange-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={editForm.title}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, title: e.target.value }))
+                }
+                className={editInputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                Descrizione
+              </label>
+              <textarea
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, description: e.target.value }))
+                }
+                className={editInputClass}
+                rows="2"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                Inizio
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={editForm.startDate}
+                  onChange={closeOnPick("startDate")}
+                  className={editInputClass}
+                />
+                <input
+                  type="time"
+                  value={editForm.startTime}
+                  onChange={closeOnPick("startTime")}
+                  className={editInputClass}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                Fine
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={editForm.endDate}
+                  onChange={closeOnPick("endDate")}
+                  className={editInputClass}
+                />
+                <input
+                  type="time"
+                  value={editForm.endTime}
+                  onChange={closeOnPick("endTime")}
+                  className={editInputClass}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                Posto
+              </label>
+              <input
+                type="text"
+                value={editForm.location}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, location: e.target.value }))
+                }
+                className={editInputClass}
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                className="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-bold py-2 rounded-lg text-sm transition hover:bg-gray-200 dark:hover:bg-gray-700"
+              >
+                Annulla
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingEvent}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 disabled:cursor-not-allowed text-white font-bold py-2 rounded-lg text-sm transition"
+              >
+                {isSavingEvent ? "Salvataggio..." : "Salva modifiche"}
+              </button>
+            </div>
+          </form>
+        )}
       </Card>
 
       {/* RSVP Section */}
       <Card>
-        <h2 className="text-lg font-bold mb-4 dark:text-white">Parteciperai?</h2>
+        <h2 className="text-lg font-bold mb-4 dark:text-white">
+          Parteciperai?
+        </h2>
         <div className="flex w-full gap-2">
           {RSVP_OPTIONS.map((opt) => {
             const isSelected = myRsvp?.status === opt.status;
@@ -274,8 +621,11 @@ export default function EventDetail({ user }) {
                 key={opt.status}
                 onClick={() => updateRSVP(opt.status)}
                 disabled={isRsvpBusy}
-                className={`flex-1 py-3 rounded-lg font-bold transition-all duration-200 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm md:text-base ${opt.color} ${isSelected ? "ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 ring-gray-900 dark:ring-white" : ""
-                  }`}
+                className={`flex-1 py-3 rounded-lg font-bold transition-all duration-200 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm md:text-base ${opt.color} ${
+                  isSelected
+                    ? "ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 ring-gray-900 dark:ring-white"
+                    : ""
+                }`}
               >
                 {opt.label}
               </button>
@@ -288,13 +638,17 @@ export default function EventDetail({ user }) {
         <>
           {/* Carpooling Management */}
           <Card>
-            <h2 className="text-lg font-bold mb-4 dark:text-white">🚗 Gestisci passaggio</h2>
+            <h2 className="text-lg font-bold mb-4 dark:text-white">
+              🚗 Gestisci passaggio
+            </h2>
             <div className="flex flex-col gap-3">
               <label className="flex items-center gap-2 text-sm dark:text-white cursor-pointer">
                 <input
                   type="checkbox"
                   checked={!!myRsvp?.has_car}
-                  onChange={(e) => updateCarpool(e.target.checked, e.target.checked ? 3 : 0)}
+                  onChange={(e) =>
+                    updateCarpool(e.target.checked, e.target.checked ? 3 : 0)
+                  }
                   className="w-4 h-4"
                 />
                 Offro un passaggio
@@ -313,10 +667,11 @@ export default function EventDetail({ user }) {
                           key={posti}
                           type="button"
                           onClick={() => updateCarpool(true, posti)}
-                          className={`flex-1 py-2 rounded-lg font-bold text-sm border transition-all cursor-pointer ${isSelected
+                          className={`flex-1 py-2 rounded-lg font-bold text-sm border transition-all cursor-pointer ${
+                            isSelected
                               ? "bg-indigo-600 text-white border-indigo-600"
                               : "bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
-                            }`}
+                          }`}
                         >
                           {posti}
                         </button>
@@ -329,16 +684,21 @@ export default function EventDetail({ user }) {
 
             {!myRsvp?.has_car && (
               <div className="mt-6 pt-4 border-t dark:border-gray-700">
-                <h3 className="text-sm font-bold mb-3 dark:text-white">Prenota un posto:</h3>
+                <h3 className="text-sm font-bold mb-3 dark:text-white">
+                  Prenota un posto:
+                </h3>
                 {rsvps.filter((r) => r.has_car).length === 0 ? (
-                  <p className="text-xs text-gray-400">Nessuno offre passaggi al momento.</p>
+                  <p className="text-xs text-gray-400">
+                    Nessuno offre passaggi al momento.
+                  </p>
                 ) : (
                   <div className="space-y-2">
                     {rsvps
                       .filter((r) => r.has_car)
                       .map((driver) => {
                         const isPiena = driver.available_seats <= 0;
-                        const isMiaPrenotazione = myRsvp?.driver_id === driver.user_id;
+                        const isMiaPrenotazione =
+                          myRsvp?.driver_id === driver.user_id;
 
                         return (
                           <div
@@ -346,20 +706,30 @@ export default function EventDetail({ user }) {
                             className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded-lg"
                           >
                             <span className="text-sm dark:text-white">
-                              {driver.user_profile?.display_name || "Utente"} ({driver.available_seats} posti)
+                              {driver.user_profile?.display_name || "Utente"} (
+                              {driver.available_seats} posti)
                             </span>
                             <button
                               disabled={isPiena && !isMiaPrenotazione}
                               onClick={() => bookSeat(driver.user_id)}
-                              title={isMiaPrenotazione ? "Tocca per annullare la prenotazione" : undefined}
-                              className={`text-xs px-2 py-1 rounded transition-all cursor-pointer ${isMiaPrenotazione
+                              title={
+                                isMiaPrenotazione
+                                  ? "Tocca per annullare la prenotazione"
+                                  : undefined
+                              }
+                              className={`text-xs px-2 py-1 rounded transition-all cursor-pointer ${
+                                isMiaPrenotazione
                                   ? "bg-green-600 text-white hover:bg-green-700"
                                   : isPiena
                                     ? "bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed"
                                     : "bg-blue-500 text-white hover:bg-blue-600"
-                                }`}
+                              }`}
                             >
-                              {isMiaPrenotazione ? "Prenotato ✅" : isPiena ? "Auto piena ❌" : "Prenota"}
+                              {isMiaPrenotazione
+                                ? "Prenotato ✅"
+                                : isPiena
+                                  ? "Auto piena ❌"
+                                  : "Prenota"}
                             </button>
                           </div>
                         );
@@ -372,7 +742,9 @@ export default function EventDetail({ user }) {
 
           {/* Lista Partecipanti */}
           <Card>
-            <h2 className="text-lg font-bold mb-4 dark:text-white">👥 Partecipanti ({rsvps.length})</h2>
+            <h2 className="text-lg font-bold mb-4 dark:text-white">
+              👥 Partecipanti ({rsvps.length})
+            </h2>
             {rsvps.length === 0 ? (
               <p className="text-gray-400 text-sm">Ancora nessuno...</p>
             ) : (
@@ -394,20 +766,27 @@ export default function EventDetail({ user }) {
                           <span className="font-medium">{name}</span>
                           {r.has_car && (
                             <span className="text-xs text-indigo-500 font-semibold">
-                              🚗 {r.available_seats > 0 ? `${r.available_seats} posti liberi` : "Auto piena"}
+                              🚗{" "}
+                              {r.available_seats > 0
+                                ? `${r.available_seats} posti liberi`
+                                : "Auto piena"}
                             </span>
                           )}
                           {r.driver_id && (
                             <span className="text-xs text-green-600 font-semibold">
-                              🙋‍♂️ Con {r.driver_profile?.display_name || "Autista"}
+                              🙋‍♂️ Con{" "}
+                              {r.driver_profile?.display_name || "Autista"}
                             </span>
                           )}
                         </div>
                       </div>
 
                       <span
-                        className={`px-2 py-0.5 rounded text-xs shrink-0 ${r.status === "Parteciperò" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"
-                          }`}
+                        className={`px-2 py-0.5 rounded text-xs shrink-0 ${
+                          r.status === "Parteciperò"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-gray-100 text-gray-600"
+                        }`}
                       >
                         {r.status}
                       </span>
@@ -420,7 +799,9 @@ export default function EventDetail({ user }) {
 
           {/* Checklist Cose da Portare */}
           <Card>
-            <h2 className="text-lg font-bold mb-4 dark:text-white">📦 Cosa portiamo?</h2>
+            <h2 className="text-lg font-bold mb-4 dark:text-white">
+              📦 Cosa portiamo?
+            </h2>
 
             <div className="flex gap-2 mb-4">
               <input
@@ -452,7 +833,9 @@ export default function EventDetail({ user }) {
             </div>
 
             {items.length === 0 ? (
-              <p className="text-gray-400 text-sm">Nessun oggetto in lista, ancora.</p>
+              <p className="text-gray-400 text-sm">
+                Nessun oggetto in lista, ancora.
+              </p>
             ) : (
               <div className="space-y-2">
                 {items.map((item) => {
@@ -466,27 +849,44 @@ export default function EventDetail({ user }) {
                     >
                       <span
                         className={
-                          item.assigned_to ? "line-through text-gray-400" : "text-gray-800 dark:text-gray-200"
+                          item.assigned_to
+                            ? "line-through text-gray-400"
+                            : "text-gray-800 dark:text-gray-200"
                         }
                       >
                         {item.item_name}
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
                         {item.assigned_to && (
-                          <span className="text-xs text-gray-500">{item.profiles?.display_name || ""}</span>
+                          <span className="text-xs text-gray-500">
+                            {item.profiles?.display_name || ""}
+                          </span>
                         )}
                         <button
                           disabled={claimedByOther}
-                          onClick={() => (claimedByMe ? releaseItem(item.id) : claimItem(item.id))}
-                          title={claimedByOther ? "Già prenotato da qualcun altro" : undefined}
-                          className={`text-xs px-2 py-1 rounded font-medium transition ${claimedByMe
+                          onClick={() =>
+                            claimedByMe
+                              ? releaseItem(item.id)
+                              : claimItem(item.id)
+                          }
+                          title={
+                            claimedByOther
+                              ? "Già prenotato da qualcun altro"
+                              : undefined
+                          }
+                          className={`text-xs px-2 py-1 rounded font-medium transition ${
+                            claimedByMe
                               ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
                               : claimedByOther
                                 ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                                 : "bg-blue-500 text-white hover:bg-blue-600"
-                            }`}
+                          }`}
                         >
-                          {claimedByMe ? "✅ Annulla" : claimedByOther ? "✅ Preso" : "Prenota"}
+                          {claimedByMe
+                            ? "✅ Annulla"
+                            : claimedByOther
+                              ? "✅ Preso"
+                              : "Prenota"}
                         </button>
                         <button
                           onClick={() => removeItem(item.id)}
@@ -502,12 +902,17 @@ export default function EventDetail({ user }) {
               </div>
             )}
           </Card>
+
+          {/* Sezione Commenti */}
+          <EventComments eventId={id} user={user} />
         </>
       ) : (
-        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-300 p-4 rounded-2xl text-center text-sm font-medium animate-fade-in">
-          Hai indicato che non parteciperai a questo evento. Cambia la tua risposta per vedere la logistica e la
-          checklist.
-        </div>
+        myRsvp?.status === "Non parteciperò" && (
+          <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-300 p-4 rounded-2xl text-center text-sm font-medium animate-fade-in">
+            Hai indicato che non parteciperai a questo evento. Cambia la tua
+            risposta per vedere la logistica e la checklist.
+          </div>
+        )
       )}
     </div>
   );
