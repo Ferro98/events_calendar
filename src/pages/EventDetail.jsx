@@ -426,6 +426,51 @@ export default function EventDetail({ user }) {
     );
   }
 
+  const generateGoogleCalendarLink = (event) => {
+    const baseUrl =
+      "https://calendar.google.com/calendar/render?action=TEMPLATE";
+
+    // Se l'evento non è ancora stato caricato dallo stato o dal DB, usciamo subito safely
+    if (!event) return "";
+
+    const formatDateTime = (dateVal) => {
+      if (!dateVal) return "";
+      const date = new Date(dateVal);
+      // 🌟 IL SALVAVITA: Se la data è "Invalid Date", restituisce vero su isNaN e usciamo senza crashare
+      if (isNaN(date.getTime())) return "";
+      return date.toISOString().replace(/-|:|\.\d\d\d/g, "");
+    };
+
+    const startTime = formatDateTime(event.start_time);
+
+    // Calcoliamo la data di fine in modo sicuro per evitare di passare NaN alla funzione
+    let endTime = "";
+    if (event.end_time) {
+      endTime = formatDateTime(event.end_time);
+    } else {
+      const startParsed = new Date(event.start_time);
+      if (!isNaN(startParsed.getTime())) {
+        // Se la data di inizio è valida, aggiungiamo 2 ore di default
+        const endCalculated = new Date(
+          startParsed.getTime() + 2 * 60 * 60 * 1000,
+        );
+        endTime = formatDateTime(endCalculated);
+      }
+    }
+
+    const params = new URLSearchParams({
+      text: event.title || "Evento Summer Squad",
+      dates: `${startTime}/${endTime}`,
+      details: event.description || "Creato con Summer Squad ☀️",
+      location: event.location || "",
+    });
+
+    return `${baseUrl}&${params.toString()}`;
+  };
+
+  // Prima del return, ricordati di calcolare l'URL:
+  const googleCalendarUrl = generateGoogleCalendarLink(event);
+
   return (
     <div className="max-w-3xl mx-auto space-y-6 p-4">
       {errorMsg && (
@@ -481,6 +526,21 @@ export default function EventDetail({ user }) {
               📍 {event.location || "Nessuna posizione"}
             </p>
 
+            {/* 🗓️ PULSANTE GOOGLE CALENDAR INSERITO QUI */}
+            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800/60">
+              <a
+                href={googleCalendarUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-bold py-2 px-3.5 rounded-xl border border-gray-200 dark:border-gray-700/70 transition shadow-sm cursor-pointer group"
+              >
+                <span className="text-sm group-hover:scale-110 transition-transform">
+                  🗓️
+                </span>
+                Salva nei tuoi promemoria
+              </a>
+            </div>
+
             {isConfirmingDelete && (
               <div className="mt-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
                 <p className="text-sm font-medium text-rose-700 dark:text-rose-300">
@@ -488,12 +548,14 @@ export default function EventDetail({ user }) {
                 </p>
                 <div className="flex gap-2 mt-3">
                   <button
+                    type="button"
                     onClick={() => setIsConfirmingDelete(false)}
                     className="flex-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-bold py-2 rounded-lg text-sm transition hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
                   >
                     Annulla
                   </button>
                   <button
+                    type="button"
                     onClick={deleteEvent}
                     disabled={isDeleting}
                     className="flex-1 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white font-bold py-2 rounded-lg text-sm transition"
@@ -621,10 +683,11 @@ export default function EventDetail({ user }) {
                 key={opt.status}
                 onClick={() => updateRSVP(opt.status)}
                 disabled={isRsvpBusy}
-                className={`flex-1 py-3 rounded-lg font-bold transition-all duration-200 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm md:text-base ${opt.color} ${isSelected
-                  ? "ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 ring-gray-900 dark:ring-white"
-                  : ""
-                  }`}
+                className={`flex-1 py-3 rounded-lg font-bold transition-all duration-200 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm md:text-base ${opt.color} ${
+                  isSelected
+                    ? "ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 ring-gray-900 dark:ring-white"
+                    : ""
+                }`}
               >
                 {opt.label}
               </button>
@@ -666,10 +729,11 @@ export default function EventDetail({ user }) {
                           key={posti}
                           type="button"
                           onClick={() => updateCarpool(true, posti)}
-                          className={`flex-1 py-2 rounded-lg font-bold text-sm border transition-all cursor-pointer ${isSelected
-                            ? "bg-indigo-600 text-white border-indigo-600"
-                            : "bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
-                            }`}
+                          className={`flex-1 py-2 rounded-lg font-bold text-sm border transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-indigo-600 text-white border-indigo-600"
+                              : "bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          }`}
                         >
                           {posti}
                         </button>
@@ -708,6 +772,7 @@ export default function EventDetail({ user }) {
                               {driver.available_seats} posti)
                             </span>
                             <button
+                              type="button"
                               disabled={isPiena && !isMiaPrenotazione}
                               onClick={() => bookSeat(driver.user_id)}
                               title={
@@ -715,12 +780,13 @@ export default function EventDetail({ user }) {
                                   ? "Tocca per annullare la prenotazione"
                                   : undefined
                               }
-                              className={`text-xs px-2 py-1 rounded transition-all cursor-pointer ${isMiaPrenotazione
-                                ? "bg-green-600 text-white hover:bg-green-700"
-                                : isPiena
-                                  ? "bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed"
-                                  : "bg-blue-500 text-white hover:bg-blue-600"
-                                }`}
+                              className={`text-xs px-2 py-1 rounded transition-all cursor-pointer ${
+                                isMiaPrenotazione
+                                  ? "bg-green-600 text-white hover:bg-green-700"
+                                  : isPiena
+                                    ? "bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed"
+                                    : "bg-blue-500 text-white hover:bg-blue-600"
+                              }`}
                             >
                               {isMiaPrenotazione
                                 ? "Prenotato ✅"
@@ -779,10 +845,11 @@ export default function EventDetail({ user }) {
                       </div>
 
                       <span
-                        className={`px-2 py-0.5 rounded text-xs shrink-0 ${r.status === "Parteciperò"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-600"
-                          }`}
+                        className={`px-2 py-0.5 rounded text-xs shrink-0 ${
+                          r.status === "Parteciperò"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-gray-100 text-gray-600"
+                        }`}
                       >
                         {r.status}
                       </span>
@@ -814,6 +881,7 @@ export default function EventDetail({ user }) {
                 }}
               />
               <button
+                type="button"
                 disabled={isAddingItem}
                 onClick={() => {
                   const input = document.getElementById("item-input");
@@ -841,25 +909,19 @@ export default function EventDetail({ user }) {
                   return (
                     <div
                       key={item.id}
-                      // 🌟 MODIFICATO: Ora è flex-wrap fisso, gestisce lui la riga singola o doppia in base allo spazio
                       className="flex flex-wrap items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl gap-x-4 gap-y-2 border border-gray-100 dark:border-gray-800/40"
                     >
-                      {/* Nome dell'oggetto */}
                       <span
-                        // 🌟 MODIFICATO: flex-1 e min-w dicono a Flexbox quando è il momento di cedere il passo e andare a capo
-                        className={`text-sm break-words flex-1 min-w-[140px] ${item.assigned_to
+                        className={`text-sm break-words flex-1 min-w-[140px] ${
+                          item.assigned_to
                             ? "line-through text-gray-400 dark:text-gray-500"
                             : "text-gray-800 dark:text-gray-200 font-medium"
-                          }`}
+                        }`}
                       >
                         {item.item_name}
                       </span>
 
-                      {/* Barra delle azioni */}
-                      <div
-                        // 🌟 MODIFICATO: ml-auto fa la magia. Se va a capo, si tiene incollato a destra automaticamente
-                        className="flex items-center justify-end gap-2 shrink-0 ml-auto"
-                      >
+                      <div className="flex items-center justify-end gap-2 shrink-0 ml-auto">
                         {item.assigned_to && (
                           <span className="text-[11px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-900/60 px-2 py-0.5 rounded-md truncate max-w-[120px]">
                             {item.profiles?.display_name || ""}
@@ -867,22 +929,35 @@ export default function EventDetail({ user }) {
                         )}
 
                         <button
+                          type="button"
                           disabled={claimedByOther}
                           onClick={() =>
-                            claimedByMe ? releaseItem(item.id) : claimItem(item.id)
+                            claimedByMe
+                              ? releaseItem(item.id)
+                              : claimItem(item.id)
                           }
-                          title={claimedByOther ? "Già prenotato da qualcun altro" : undefined}
-                          className={`text-xs px-2.5 py-1.5 rounded-lg font-semibold transition shrink-0 cursor-pointer ${claimedByMe
+                          title={
+                            claimedByOther
+                              ? "Già prenotato da qualcun altro"
+                              : undefined
+                          }
+                          className={`text-xs px-2.5 py-1.5 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
+                            claimedByMe
                               ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400"
                               : claimedByOther
                                 ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                                 : "bg-blue-500 text-white hover:bg-blue-600 shadow-sm"
-                            }`}
+                          }`}
                         >
-                          {claimedByMe ? "✅ Annulla" : claimedByOther ? "✅ Preso" : "Prenota"}
+                          {claimedByMe
+                            ? "✅ Annulla"
+                            : claimedByOther
+                              ? "✅ Preso"
+                              : "Prenota"}
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => removeItem(item.id)}
                           className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 font-bold px-2 h-8 flex items-center justify-center cursor-pointer transition"
                           aria-label="Rimuovi oggetto"
