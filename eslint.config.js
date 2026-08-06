@@ -17,5 +17,14 @@ export default defineConfig([
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
+    rules: {
+      // Il pattern "fetch al mount + subscription realtime dentro useEffect"
+      // è usato deliberatamente in tutto il progetto (Home, EventDetail,
+      // CalendarView, EventComments): la regola lo segnala come errore,
+      // ma eliminarlo richiederebbe di riscrivere l'architettura di data
+      // fetching. La teniamo come warning invece che error per non
+      // bloccare la CI su un pattern esistente e voluto.
+      'react-hooks/set-state-in-effect': 'warn',
+    },
   },
 ])

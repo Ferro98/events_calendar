@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { useToast } from "../context/ToastContext";
 
 // --- Helpers di data -------------------------------------------------
 
@@ -471,10 +472,9 @@ export default function Home({ user }) {
   const [events, setEvents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  useEffect(() => {
-    fetchEvents();
-  }, []);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [rsvpFilter, setRsvpFilter] = useState("all"); // "all" | "mine"
+  const { showToast } = useToast();
 
   const fetchEvents = async () => {
     setIsLoading(true);
@@ -490,19 +490,54 @@ export default function Home({ user }) {
         `
         *,
         profiles(display_name),
-        rsvps(status, profiles!rsvps_user_id_fkey(display_name))
+        rsvps(status, user_id, profiles!rsvps_user_id_fkey(display_name))
       `,
       )
       .order("start_time", { ascending: true, nullsFirst: false });
 
-    if (!error && data) setEvents(data);
+    if (!error && data) {
+      setEvents(data);
+    } else if (error) {
+      showToast("Impossibile caricare gli eventi. Riprova più tardi.");
+    }
     setIsLoading(false);
   };
+
+  useEffect(() => {
+    fetchEvents();
+  }, []);
 
   const handleCreated = () => {
     setIsModalOpen(false);
     fetchEvents();
   };
+
+  // Ricerca testuale (titolo/descrizione/luogo) + filtro "solo i miei eventi",
+  // applicati prima del raggruppamento in fasce così le sezioni restano coerenti.
+  const filteredEvents = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return events.filter((event) => {
+      if (query) {
+        const haystack = [event.title, event.description, event.location]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+
+      if (rsvpFilter === "mine") {
+        const mine = event.rsvps?.some(
+          (r) =>
+            r.user_id === user.id &&
+            (r.status === "Parteciperò" || r.status === "Forse"),
+        );
+        if (!mine) return false;
+      }
+
+      return true;
+    });
+  }, [events, searchQuery, rsvpFilter, user.id]);
 
   // Raggruppamento eventi in 4 fasce, calcolate una sola volta e condivise
   // da tutte le sezioni per evitare disallineamenti tra "oggi" al momento
@@ -517,7 +552,7 @@ export default function Home({ user }) {
       const week = [];
       const later = [];
 
-      for (const event of events) {
+      for (const event of filteredEvents) {
         if (!event.start_time) {
           unscheduled.push(event);
           continue;
@@ -534,7 +569,9 @@ export default function Home({ user }) {
         thisWeekEvents: week,
         laterEvents: later,
       };
-    }, [events]);
+    }, [filteredEvents]);
+
+  const isFiltering = searchQuery.trim() !== "" || rsvpFilter !== "all";
 
   return (
     <div className="space-y-8">
@@ -563,6 +600,45 @@ export default function Home({ user }) {
           >
             + <span className="hidden sm:inline">Nuovo evento</span>
             <span className="sm:hidden">Evento</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1 min-w-0">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
+            🔍
+          </span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cerca per titolo, luogo o descrizione..."
+            className="w-full pl-9 pr-3 py-2.5 border rounded-xl text-sm bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 outline-none"
+          />
+        </div>
+        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800/70 p-1 rounded-xl shrink-0">
+          <button
+            type="button"
+            onClick={() => setRsvpFilter("all")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              rsvpFilter === "all"
+                ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50 shadow-sm"
+                : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            Tutti
+          </button>
+          <button
+            type="button"
+            onClick={() => setRsvpFilter("mine")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              rsvpFilter === "mine"
+                ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-50 shadow-sm"
+                : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
+            Partecipo
           </button>
         </div>
       </div>
@@ -614,6 +690,23 @@ export default function Home({ user }) {
                 Creane uno
               </button>
               .
+            </div>
+          )}
+
+          {events.length > 0 && filteredEvents.length === 0 && (
+            <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl text-center border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+              Nessun evento corrisponde alla ricerca.{" "}
+              {isFiltering && (
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    setRsvpFilter("all");
+                  }}
+                  className="text-orange-500 font-bold hover:underline"
+                >
+                  Azzera filtri
+                </button>
+              )}
             </div>
           )}
         </>

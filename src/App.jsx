@@ -5,11 +5,16 @@ import Home from "./pages/Home";
 import CalendarView from "./pages/CalendarView";
 import EventDetail from "./pages/EventDetail";
 import Login from "./components/Login"; // Assicurati che il path sia corretto
+import EditNameModal from "./components/EditNameModal";
+import { useToast } from "./context/ToastContext";
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editingName, setEditingName] = useState(false);
+  const [savingName, setSavingName] = useState(false);
+  const { showToast } = useToast();
 
   // Funzione per recuperare il display_name dalla tabella profiles
   const fetchUserProfile = async (userId) => {
@@ -83,30 +88,21 @@ export default function App() {
   };
 
   // Funzione per salvare il nuovo nome nel database
-  const handleUpdateName = async () => {
-    const nuovoNome = prompt(
-      "Inserisci il tuo nome e cognome reali:",
-      currentUser.display_name,
-    );
-
-    if (
-      !nuovoNome ||
-      !nuovoNome.trim() ||
-      nuovoNome === currentUser.display_name
-    )
-      return;
-
+  const handleSaveName = async (nuovoNome) => {
+    setSavingName(true);
     const { error } = await supabase
       .from("profiles")
-      .update({ display_name: nuovoNome.trim() })
+      .update({ display_name: nuovoNome })
       .eq("id", currentUser.id);
 
     if (!error) {
       // Aggiorna lo stato locale per vedere subito il cambio nella UI
-      setProfile({ ...profile, display_name: nuovoNome.trim() });
+      setProfile({ ...profile, display_name: nuovoNome });
+      setEditingName(false);
     } else {
-      alert("Errore durante l'aggiornamento del nome.");
+      showToast("Errore durante l'aggiornamento del nome.");
     }
+    setSavingName(false);
   };
 
   return (
@@ -121,7 +117,7 @@ export default function App() {
           </a>
           <div className="flex items-center gap-4">
             <button
-              onClick={handleUpdateName}
+              onClick={() => setEditingName(true)}
               title="Clicca per modificare il tuo nome"
               className="bg-orange-50 dark:bg-orange-950 border border-orange-100 dark:border-orange-900 text-orange-800 dark:text-orange-300 px-4 py-1.5 rounded-full font-semibold text-sm flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer group"
             >
@@ -152,6 +148,15 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>
+
+      {editingName && (
+        <EditNameModal
+          initialName={currentUser.display_name}
+          saving={savingName}
+          onClose={() => setEditingName(false)}
+          onSave={handleSaveName}
+        />
+      )}
     </div>
   );
 }

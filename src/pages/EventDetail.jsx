@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import EventComments from "../components/EventComments";
+import { useToast } from "../context/ToastContext";
 
 const RSVP_OPTIONS = [
   {
@@ -113,6 +114,7 @@ function DetailSkeleton() {
 export default function EventDetail({ user }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [event, setEvent] = useState(null);
   const [rsvps, setRsvps] = useState([]);
   const [items, setItems] = useState([]);
@@ -129,6 +131,43 @@ export default function EventDetail({ user }) {
   // Eliminazione evento (solo il creatore)
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const fetchEventData = async (initial = false) => {
+    if (initial) setIsLoading(true);
+
+    const { data: eventData, error: eventError } = await supabase
+      .from("events")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (eventError) {
+      console.error("Errore eventi:", eventError);
+      if (initial) showToast("Impossibile caricare l'evento. Riprova più tardi.");
+    }
+    setEvent(eventData);
+
+    const { data: rsvpData, error: rsvpError } = await supabase
+      .from("rsvps")
+      .select(
+        `
+    *,
+    user_profile:profiles!rsvps_user_id_fkey(display_name),
+    driver_profile:profiles!rsvps_driver_id_fkey(display_name)
+  `,
+      )
+      .eq("event_id", id);
+    if (rsvpError) console.error("Errore rsvps:", rsvpError);
+    setRsvps(rsvpData || []);
+
+    const { data: itemsData, error: itemsError } = await supabase
+      .from("event_items")
+      .select("*, profiles(display_name)")
+      .eq("event_id", id);
+    if (itemsError) console.error("Errore items:", itemsError);
+    setItems(itemsData || []);
+
+    if (initial) setIsLoading(false);
+  };
 
   useEffect(() => {
     fetchEventData(true);
@@ -164,40 +203,6 @@ export default function EventDetail({ user }) {
       supabase.removeChannel(channel);
     };
   }, [id]);
-
-  const fetchEventData = async (initial = false) => {
-    if (initial) setIsLoading(true);
-
-    const { data: eventData, error: eventError } = await supabase
-      .from("events")
-      .select("*")
-      .eq("id", id)
-      .single();
-    if (eventError) console.error("Errore eventi:", eventError);
-    setEvent(eventData);
-
-    const { data: rsvpData, error: rsvpError } = await supabase
-      .from("rsvps")
-      .select(
-        `
-    *,
-    user_profile:profiles!rsvps_user_id_fkey(display_name),
-    driver_profile:profiles!rsvps_driver_id_fkey(display_name)
-  `,
-      )
-      .eq("event_id", id);
-    if (rsvpError) console.error("Errore rsvps:", rsvpError);
-    setRsvps(rsvpData || []);
-
-    const { data: itemsData, error: itemsError } = await supabase
-      .from("event_items")
-      .select("*, profiles(display_name)")
-      .eq("event_id", id);
-    if (itemsError) console.error("Errore items:", itemsError);
-    setItems(itemsData || []);
-
-    if (initial) setIsLoading(false);
-  };
 
   const myRsvp = rsvps.find((r) => r.user_id === user.id);
   const isParticipating =
@@ -471,6 +476,66 @@ export default function EventDetail({ user }) {
   // Prima del return, ricordati di calcolare l'URL:
   const googleCalendarUrl = generateGoogleCalendarLink(event);
 
+  const escapeIcsText = (text = "") =>
+    text
+      .replace(/\\/g, "\\\\")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,")
+      .replace(/\n/g, "\\n");
+
+  const formatIcsDate = (dateVal) => {
+    const date = new Date(dateVal);
+    if (isNaN(date.getTime())) return "";
+    return date.toISOString().replace(/-|:|\.\d\d\d/g, "");
+  };
+
+  // Genera e scarica un file .ics, per aggiungere l'evento a calendari
+  // diversi da Google (Apple Calendar, Outlook, ecc.), che non supportano
+  // il link "render?action=TEMPLATE" usato sopra.
+  const handleDownloadIcs = () => {
+    const start = formatIcsDate(event.start_time);
+    if (!start) return;
+
+    let end = event.end_time ? formatIcsDate(event.end_time) : "";
+    if (!end) {
+      const startParsed = new Date(event.start_time);
+      if (!isNaN(startParsed.getTime())) {
+        end = formatIcsDate(new Date(startParsed.getTime() + 2 * 60 * 60 * 1000));
+      }
+    }
+
+    const icsLines = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Summer Squad//Calendario Ghei//IT",
+      "CALSCALE:GREGORIAN",
+      "BEGIN:VEVENT",
+      `UID:${event.id}@calendario-ghei`,
+      `DTSTAMP:${formatIcsDate(new Date())}`,
+      `DTSTART:${start}`,
+      end ? `DTEND:${end}` : null,
+      `SUMMARY:${escapeIcsText(event.title || "Evento Summer Squad")}`,
+      event.description
+        ? `DESCRIPTION:${escapeIcsText(event.description)}`
+        : null,
+      event.location ? `LOCATION:${escapeIcsText(event.location)}` : null,
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].filter(Boolean);
+
+    const blob = new Blob([icsLines.join("\r\n")], {
+      type: "text/calendar;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(event.title || "evento").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="max-w-3xl mx-auto space-y-6 p-4">
       {errorMsg && (
@@ -527,7 +592,7 @@ export default function EventDetail({ user }) {
             </p>
 
             {/* 🗓️ PULSANTE GOOGLE CALENDAR INSERITO QUI */}
-            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800/60">
+            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800/60 flex flex-wrap gap-2">
               <a
                 href={googleCalendarUrl}
                 target="_blank"
@@ -539,6 +604,16 @@ export default function EventDetail({ user }) {
                 </span>
                 Salva nei tuoi promemoria
               </a>
+              <button
+                type="button"
+                onClick={handleDownloadIcs}
+                className="inline-flex items-center gap-2 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-bold py-2 px-3.5 rounded-xl border border-gray-200 dark:border-gray-700/70 transition shadow-sm cursor-pointer group"
+              >
+                <span className="text-sm group-hover:scale-110 transition-transform">
+                  📥
+                </span>
+                Scarica .ics (Apple/Outlook)
+              </button>
             </div>
 
             {isConfirmingDelete && (
