@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabaseClient";
+import { useToast } from "../context/ToastContext";
 
 const MAX_COMMENT_LENGTH = 500;
 
@@ -78,6 +79,7 @@ export default function EventComments({ eventId, user }) {
   const [pendingComment, setPendingComment] = useState(null);
   const listRef = useRef(null);
   const textareaRef = useRef(null);
+  const { showToast } = useToast();
 
   // 1. Recupera i commenti dell'evento
   const fetchComments = async () => {
@@ -92,7 +94,11 @@ export default function EventComments({ eventId, user }) {
       .eq("event_id", eventId)
       .order("created_at", { ascending: true });
 
-    if (!error && data) setComments(data);
+    if (!error && data) {
+      setComments(data);
+    } else if (error) {
+      showToast("Impossibile caricare i commenti.");
+    }
   };
 
   useEffect(() => {
@@ -162,6 +168,7 @@ export default function EventComments({ eventId, user }) {
       await fetchComments();
     } else {
       setNewComment(text); // ripristina il testo se l'invio fallisce
+      showToast("Impossibile inviare il commento. Riprova.");
     }
     setPendingComment(null);
     setLoading(false);
@@ -176,6 +183,8 @@ export default function EventComments({ eventId, user }) {
 
     if (!error) {
       fetchComments(); // 👈 Forza l'aggiornamento immediato per chi cancella
+    } else {
+      showToast("Impossibile eliminare il commento. Riprova.");
     }
   };
 

@@ -157,10 +157,6 @@ export default function CalendarView() {
   const [currentView, setCurrentView] = useState("month");
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchAllEvents();
-  }, []);
-
   const fetchAllEvents = async () => {
     setIsLoading(true);
     setErrorMsg("");
@@ -181,6 +177,10 @@ export default function CalendarView() {
     }
     setIsLoading(false);
   };
+
+  useEffect(() => {
+    fetchAllEvents();
+  }, []);
 
   const handleSelectEvent = (event) => {
     navigate(`/event/${event.id}`);
