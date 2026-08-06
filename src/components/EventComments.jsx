@@ -1,6 +1,30 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 
+// Formatta la data di un commento in modo compatto: "Oggi 14:32", "Ieri 14:32"
+// oppure "6 ago 14:32" (con anno se diverso da quello corrente).
+function formatCommentDate(dateStr) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const isSameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  if (isSameDay(date, now)) return `Oggi ${time}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (isSameDay(date, yesterday)) return `Ieri ${time}`;
+
+  const dateOptions = { day: "numeric", month: "short" };
+  if (date.getFullYear() !== now.getFullYear()) dateOptions.year = "numeric";
+
+  return `${date.toLocaleDateString("it-IT", dateOptions)} ${time}`;
+}
+
 export default function EventComments({ eventId, user }) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
@@ -97,11 +121,11 @@ export default function EventComments({ eventId, user }) {
                   <span className="font-bold text-orange-500 text-xs">
                     {c.profiles?.display_name || "Utente"}
                   </span>
-                  <span className="text-[10px] text-gray-400">
-                    {new Date(c.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                  <span
+                    className="text-[10px] text-gray-400"
+                    title={new Date(c.created_at).toLocaleString("it-IT")}
+                  >
+                    {formatCommentDate(c.created_at)}
                   </span>
                 </div>
                 <p className="text-gray-700 dark:text-gray-300 text-xs break-all">
